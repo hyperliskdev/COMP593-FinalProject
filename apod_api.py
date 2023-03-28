@@ -9,6 +9,9 @@ dev_key = 'iAqY4P2RxYRWc6KsvVmWUzf0l3WSVxDofzxelxvj'
 
 def main():
     
+    apod_info = get_apod_info('2018-12-31')
+    print(apod_info)
+    
     return
 
 def get_apod_info(apod_date):
@@ -21,7 +24,7 @@ def get_apod_info(apod_date):
     Returns:
         dict: Dictionary of APOD info, if successful. None if unsuccessful
     """
-    payload = {'api_key': dev_key, 'date': apod_date.isoformat()}
+    payload = {'api_key': dev_key, 'date': apod_date.format()}
     
     req = requests.get('https://api.nasa.gov/planetary/apod', params=payload)
     
@@ -42,6 +45,10 @@ def get_apod_image_url(apod_info_dict):
     Returns:
         str: APOD image URL
     """
+    
+    
+    
+    
     return
 
 if __name__ == '__main__':
