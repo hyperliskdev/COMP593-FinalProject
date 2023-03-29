@@ -12,7 +12,11 @@ Parameters:
   apod_date = APOD date (format: YYYY-MM-DD)
 """
 from datetime import date
+import hashlib
 import os
+import re
+from apod_api import get_apod_image_url
+from apod_api import get_apod_info as get_apod_info_api
 import image_lib
 import inspect
 import sys
@@ -94,7 +98,7 @@ def init_apod_cache(parent_dir):
     global image_cache_dir
     global image_cache_db
     # Determine the path of the image cache directory
-    image_cache_dir = os.path.join(parent_dir, "image_cache/")
+    image_cache_dir = os.path.join(parent_dir, "image_cache\\")
     # Create the image cache directory if it does not already exist
     if os.path.isdir(image_cache_dir) == False:
         os.mkdir(image_cache_dir)
@@ -141,12 +145,47 @@ def add_apod_to_cache(apod_date):
         int: Record ID of the APOD in the image cache DB, if a new APOD is added to the
         cache successfully or if the APOD already exists in the cache. Zero, if unsuccessful.
     """
+    
+    
     print("APOD date:", apod_date.isoformat())
-    # TODO: Download the APOD information from the NASA API
-    # TODO: Download the APOD image
-    # TODO: Check whether the APOD already exists in the image cache
-    # TODO: Save the APOD file to the image cache directory
-    # TODO: Add the APOD information to the DB
+    # Download the APOD information from the NASA API
+    apod_info = get_apod_info_api(apod_date)
+    
+    # Download the APOD image
+    apod_image_url = get_apod_image_url(apod_info)
+    image_data = image_lib.download_image(apod_image_url)
+    print("Downloaded image from " + apod_image_url)
+    
+    
+    # Check whether the APOD already exists in the image cache
+    image_hash = hashlib.sha256(image_data).hexdigest()
+    print("APOD SHA-256: " + str(image_hash))
+    
+    apod_id = get_apod_id_from_db(image_hash)
+    if  apod_id == 0:
+        
+        apod_image_path = determine_apod_file_path(
+                apod_info['title'],
+                apod_image_url
+                )
+        # Save the APOD file to the image cache directory
+        print("APOD does not exist in cache")
+        image_lib.save_image_file(image_data, apod_image_path)
+        
+        # Add the APOD information to the DB
+        apod_id = add_apod_to_db(
+            apod_info['title'],
+            apod_info['explanation'],
+            apod_image_path,
+            image_hash
+        )
+        
+        return apod_id
+        
+        
+    else:
+        return apod_id
+ 
     return 0
 
 def add_apod_to_db(title, explanation, file_path, sha256):
@@ -161,9 +200,33 @@ def add_apod_to_db(title, explanation, file_path, sha256):
     Returns:
         int: The ID of the newly inserted APOD record, if successful.  Zero, if unsuccessful       
     """
-    # TODO: Complete function body
-    return 0
-
+    
+    # Check if the apod already exits in the DB as a double check
+    apod_id = get_apod_id_from_db(sha256)
+    if apod_id != 0:
+        return apod_id
+    
+    # Connect tot eh sqlite DB
+    con = sqlite3.connect(image_cache_db)
+    cur = con.cursor()
+    
+    
+    # Create the apod sql query
+    add_apod_query = """
+    INSERT INTO apod_image (title, explanation, path, sha256)
+    VALUES (?, ?, ?, ?);
+    """
+    
+    apod = (title, explanation, file_path, sha256)
+    
+    cur.execute(add_apod_query, apod)
+    
+    con.commit()
+    con.close()
+    
+    
+    return cur.lastrowid
+    
 def get_apod_id_from_db(image_sha256):
     """Gets the record ID of the APOD in the cache having a specified SHA-256 hash value
     
@@ -175,7 +238,20 @@ def get_apod_id_from_db(image_sha256):
     Returns:
         int: Record ID of the APOD in the image cache DB, if it exists. Zero, if it does not.
     """
-    # TODO: Complete function body
+    con = sqlite3.connect(image_cache_db)
+    cur = con.cursor()
+    
+    find_apod_query = """
+    SELECT id FROM apod_image WHERE sha256 = ?;
+    """
+    cur.execute(find_apod_query, (image_sha256,))
+    result = cur.fetchone()
+    con.close()
+    
+    
+    if result is not None:
+        return result[0]
+    
     return 0
 
 def determine_apod_file_path(image_title, image_url):
@@ -203,8 +279,13 @@ def determine_apod_file_path(image_title, image_url):
     Returns:
         str: Full path at which the APOD image file must be saved in the image cache directory
     """
-    # TODO: Complete function body
-    return
+    
+    image_title = image_title.strip().replace(' ', '_')
+    image_title = re.sub('[^A-Za-z0-9_]+', '', image_title)
+    image_title = image_title + '.' + image_url.split('.')[-1]    
+    image_title =  os.path.join(image_cache_dir, image_title)
+    
+    return image_title
 
 def get_apod_info(image_id):
     """Gets the title, explanation, and full path of the APOD having a specified
@@ -216,12 +297,21 @@ def get_apod_info(image_id):
     Returns:
         dict: Dictionary of APOD information
     """
+    con = sqlite3.connect(image_cache_db)
+    cur = con.cursor()
+    
     # TODO: Query DB for image info
-    # TODO: Put information into a dictionary
+    select_apod_query = """ SELECT title, explanation, path FROM apod_image WHERE id = ? """
+    # Put information into a dictionary
+    
+    cur.execute(select_apod_query, (image_id,))
+    result = cur.fetchone()
+    con.close()
+    
     apod_info = {
-        #'title': , 
-        #'explanation': ,
-        'file_path': 'TBD',
+        'title': result[0], 
+        'explanation': result[1],
+        'file_path': result[2],
     }
     return apod_info
 
@@ -231,9 +321,21 @@ def get_all_apod_titles():
     Returns:
         list: Titles of all images in the cache
     """
-    # TODO: Complete function body
-    # NOTE: This function is only needed to support the APOD viewer GUI
-    return
+    con = sqlite3.connect(image_cache_db)
+    cur = con.cursor()
+    
+    # TODO: Query DB for image info
+    select_apod_query = """ SELECT title FROM apod_image"""
+    # Put information into a dictionary
+    
+    cur.execute(select_apod_query)
+    result = cur.fetchall()
+    con.close()
+    
+    if result is not None:
+        return result
+    
+    return None
 
 if __name__ == '__main__':
     main()
