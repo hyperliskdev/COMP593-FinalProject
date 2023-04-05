@@ -22,6 +22,7 @@ import inspect
 import sys
 import sqlite3
 
+
 # Global variables
 image_cache_dir = None  # Full path of image cache directory
 image_cache_db = None   # Full path of image cache database
@@ -64,7 +65,7 @@ def get_apod_date():
         try:
             apod_date = date.fromisoformat(sys.argv[1])
         except ValueError:
-            print("Error: invalid isoformat string -->" + str(sys.argv[1]))
+            print("Error: invalid isoformat string --> " + str(sys.argv[1]))
             sys.exit()
     
     if apod_date > date.today():
@@ -103,9 +104,12 @@ def init_apod_cache(parent_dir):
     if os.path.isdir(image_cache_dir) == False:
         os.mkdir(image_cache_dir)
         print("Image cache directory created: " + image_cache_dir)
+    else:
+        print("Image cache directory already exists: " + image_cache_dir)
         
     # Determine the path of image cache DB
     image_cache_db = os.path.join(image_cache_dir, "image_cache.db")
+    
     
     # Create the DB if it does not already exist
     if os.path.exists(image_cache_db) == False:
@@ -127,7 +131,8 @@ def init_apod_cache(parent_dir):
         con.commit()
         con.close()
         print("Image cache DB created: " + image_cache_db)
-        
+    else:
+        print("Image cache DB already exists: " + image_cache_db)
     return
         
 
@@ -184,9 +189,8 @@ def add_apod_to_cache(apod_date):
         
         
     else:
+        print("APOD already exists in cache")
         return apod_id
- 
-    return 0
 
 def add_apod_to_db(title, explanation, file_path, sha256):
     """Adds specified APOD information to the image cache DB.

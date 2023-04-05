@@ -1,7 +1,7 @@
 '''
 Library for interacting with NASA's Astronomy Picture of the Day API.
 '''
-
+import sys
 import requests
 
 dev_key = 'iAqY4P2RxYRWc6KsvVmWUzf0l3WSVxDofzxelxvj'
@@ -49,7 +49,8 @@ def get_apod_image_url(apod_info_dict):
     if apod_info_dict['media_type'] == 'image':
         return apod_info_dict['hdurl']
     elif apod_info_dict['media_type'] == 'video':
-        return apod_info_dict['thumbnail_url']
+        print("This apod date features a video, cannot download !!!")
+        sys.exit(1)
      
     return None
 
